@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>空山静舍</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    body { overflow: hidden; background: #1a1815; font-family: 'Songti SC', 'STSong', serif; color: #d1c9b8; }
+    canvas { display: block; }
+
+    /* 顶部状态 */
+    #top-bar {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(30, 28, 25, 0.6); backdrop-filter: blur(10px);
+      padding: 8px 20px; border-radius: 20px; font-size: 13px; letter-spacing: 1px;
+      display: flex; gap: 16px; align-items: center; pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    
+    /* 底部操作栏 */
+    #action-bar {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; transition: opacity 0.5s;
+    }
+    .action-btn {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: rgba(30, 28, 25, 0.7); border: 1px solid rgba(200, 180, 150, 0.2);
+      color: #b8af9e; font-size: 20px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      backdrop-filter: blur(8px); transition: all 0.3s;
+    }
+    .action-btn span { font-size: 10px; margin-top: 4px; }
+    .action-btn.active { background: rgba(180, 150, 100, 0.3); border-color: rgba(220, 200, 150, 0.5); color: #fff; }
+
+    /* 右侧浮窗 */
+    #side-menu {
+      position: fixed; right: 20px; bottom: 30px; display: flex; flex-direction: column; gap: 12px;
+      transition: opacity 0.5s;
+    }
+    .menu-btn {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(30, 28, 25, 0.6); border: 1px solid rgba(200, 180, 150, 0.2);
+      color: #b8af9e; cursor: pointer; font-size: 16px; backdrop-filter: blur(8px);
+    }
+
+    /* 隐藏 UI 时 */
+    body.immersive #top-bar, body.immersive #action-bar, body.immersive #side-menu { opacity: 0; pointer-events: none; }
+
+    /* 各种弹窗层 */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.4s; z-index: 100;
+    }
+    .modal.show { opacity: 1; pointer-events: auto; }
+    .modal-content {
+      background: #2a2722; padding: 30px; border-radius: 12px; border: 1px solid rgba(200, 180, 150, 0.2);
+      width: 90%; max-width: 500px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .modal h3 { font-weight: normal; letter-spacing: 2px; margin-bottom: 20px; color: #e0d5c0; }
+    textarea {
+      width: 100%; height: 120px; background: #1a1815; border: 1px solid #4a453c;
+      color: #d1c9b8; padding: 12px; border-radius: 8px; font-family: inherit; resize: none;
+      margin-bottom: 15px; outline: none;
+    }
+    .modal-btn {
+      padding: 8px 24px; background: transparent; border: 1px solid #8a7b66;
+      color: #d1c9b8; border-radius: 20px; cursor: pointer; transition: all 0.2s;
+    }
+    .modal-btn:hover { background: #8a7b66; color: #1a1815; }
+    .btn-danger { border-color: #8a6666; color: #c89999; }
+    .btn-danger:hover { background: #8a6666; color: #1a1815; }
+
+    /* 抄经画板 */
+    #canvas-sutra { background: #e8dfce; border-radius: 8px; cursor: crosshair; touch-action: none; width: 100%; height: 300px; }
+  </style>
+</head>
+<body>
+  <!-- 初始加载 -->
+  <div id="loading" style="position:fixed; inset:0; background:#1a1815; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+    <h1 style="letter-spacing:8px; font-weight:normal; margin-bottom:10px;">空 山 静 舍</h1>
+    <p style="font-size:12px; color:#8a7b66; letter-spacing:2px; margin-bottom:30px;">寻一处云间禅院，安放浮躁心事</p>
+    <button id="enter-btn" class="modal-btn">缓步入山</button>
+  </div>
+
+  <!-- 顶栏 -->
+  <div id="top-bar">
+    <div>共修: <span id="pop-count">0</span>人</div>
+    <div>|</div>
+    <div>静坐: <span id="timer">00:00</span></div>
+  </div>
+
+  <!-- 底部交互 -->
+  <div id="action-bar">
+    <button class="action-btn" data-action="idle">🧘<span>站立</span></button>
+    <button class="action-btn" data-action="sit">🧎<span>静坐</span></button>
+    <button class="action-btn" data-action="bow">🙇<span>合十</span></button>
+  </div>
+
+  <!-- 侧边栏 -->
+  <div id="side-menu">
+    <button class="menu-btn" id="btn-sutra" title="云上抄经">✍️</button>
+    <button class="menu-btn" id="btn-mind" title="情绪手记">🍃</button>
+    <button class="menu-btn" id="btn-immersive" title="隐藏UI">👁️</button>
+  </div>
+
+  <!-- 情绪手记弹窗 -->
+  <div class="modal" id="modal-mind">
+    <div class="modal-content">
+      <h3>云水茶寮 · 情绪手记</h3>
+      <textarea id="mind-text" placeholder="写下烦恼，存于本机，不留云端..."></textarea>
+      <div style="display:flex; justify-content:space-between;">
+        <button class="modal-btn" id="mind-save">存于本机</button>
+        <button class="modal-btn btn-danger" id="mind-release">付与晚风 (消散)</button>
+      </div>
+      <button class="modal-btn" style="margin-top:15px; width:100%;" onclick="document.getElementById('modal-mind').classList.remove('show')">关闭</button>
+    </div>
+  </div>
+
+  <!-- 抄经弹窗 -->
+  <div class="modal" id="modal-sutra">
+    <div class="modal-content" style="max-width: 600px;">
+      <h3>云上抄经 · 静心赋</h3>
+      <canvas id="canvas-sutra" width="500" height="300"></canvas>
+      <div style="display:flex; justify-content:space-between; margin-top:15px;">
+        <button class="modal-btn" id="sutra-clear">清空宣纸</button>
+        <button class="modal-btn" id="sutra-save">保存至手机</button>
+        <button class="modal-btn" onclick="document.getElementById('modal-sutra').classList.remove('show')">合上画卷</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="client.js"></script>
+</body>
+</html>
